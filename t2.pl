@@ -47,7 +47,7 @@ is_negative_effect(manejar(Cam,L1,_),en(Cam,L1)). % El camion Cam deja de estar 
 poss(levantar(G,C,Sup,L),S) :-
     grua(G),container(C),superficie(Sup),lugar(L), % Facts
     holds(disponible(G), S), % La grua esta disponible
-    holds(despejada(C), S), % El container C esta despejado
+    holds(despejada(C), S), % El container C esta despejada
     holds(sobre(C, Sup), S), % El cargo C esta sobre Sup
     holds(en(G, L), S), % La grua G esta en L
     holds(en(C, L), S), % El cargo C esta en L
@@ -55,7 +55,7 @@ poss(levantar(G,C,Sup,L),S) :-
     C \= Sup. % Diferencio variables
 
 is_positive_effect(levantar(G,C,_,_),levantando(G,C)). % La grua G levantando a container C
-is_positive_effect(levantar(_,_,Sup,_),despejado(Sup)). % La superficie Sup queda despejada
+is_positive_effect(levantar(_,_,Sup,_),despejada(Sup)). % La superficie Sup queda despejada
 is_negative_effect(levantar(G,_,_,_), disponible(G)). % La grua G deja de estar disponible
 is_negative_effect(levantar(_,C,Sup,_),sobre(C,Sup)). % El container C deja de estar sobre Sup
 is_negative_effect(levantar(_,C,_,L),en(C,L)). % El container C deja de estar en lugar L
@@ -72,10 +72,10 @@ poss(soltar(G,C,Sup,L),S) :-
 
 is_positive_effect(soltar(_,C,Sup,_), sobre(C, Sup)). % El container C pasa a estar sobre Sup
 is_positive_effect(soltar(_,C,_,L), en(C, L)). % El container C pasa a estar en lugar L
-is_positive_effect(levantar(G,_,_,_), disponible(G)). % La grua G pasa a estar disponible
-is_positive_effect(levantar(_,C,_,_), despejado(C)). % El container C pasa a estar despejado
+is_positive_effect(soltar(G,_,_,_), disponible(G)). % La grua G pasa a estar disponible
+is_positive_effect(soltar(_,C,_,_), despejada(C)). % El container C pasa a estar despejada
 is_negative_effect(soltar(G,C,_,_), levantando(G,C)). % La grua G ya no levantando a container C
-is_negative_effect(levantar(_,_,Sup,_),despejado(Sup)). % La superficie Sup deja de estar despejada
+is_negative_effect(soltar(_,_,Sup,_),despejada(Sup)). % La superficie Sup deja de estar despejada
 
 %%% Accion cargar
 poss(cargar(G,Container,Camion,L),S) :-
@@ -129,24 +129,32 @@ null_heuristic(_,0).
 
 astar_heuristic1(State,N) :-
     goal_condition(GState),
-    findall(C,(member(sobre(C,Gpos),GState), member(sobre(C,Pos), State), Gpos\=Pos),List), %La lista van a ser todos los C que cumple Condicion
+    findall(C,(member(sobre(C,Gpos),GState), member(sobre(C,Pos), State), Gpos\=Pos),List),
     length(List,N).
 
 astar_heuristic2(State,N) :-
     goal_condition(GState),
-    findall(sobre(A,B),(member(sobre(A, B),GState), \+ member(sobre(A,B), State), member(sobre(_, B), State)),List), %La lista van a ser todos los C que cumple Condicion
+    findall(sobre(A,B),(member(sobre(A, B),GState), \+ member(sobre(A,B), State), member(sobre(_, B), State)),List),
     length(List,N).
 
-goal_counting(State, N) :-
+astar_heuristic3(State, N) :-
     goal_condition(GState),
-    findall(F, (member(F, GState), \+ member(F, State)), L),
-    length(L, N).
+    findall(F, (member(F, GState), \+ member(F, State)), L1),
+    findall(en(A, B),(member(en(A, B), GState), \+ member(en(A, B), State), member(en(_, B), State)), L2),
+    findall(disponible(G),(member(disponible(G), GState), \+ member(disponible(G), State)), L3),
+    append(L1,L2,L12),
+    append(L12,L3,L123),
+    length(L123, N).
 
-goal_counting_plus(State, N) :-
+astar_heuristic4(State, N) :-
     goal_condition(GState),
-    findall(on(A, B),(member(en(A, B), GState), \+ member(en(A, B), State), member(en(_, B), State)), L1),
+    findall(en(A, B),(member(en(A, B), GState), \+ member(en(A, B), State), member(en(_, B), State)), L1),
     findall(F, (member(F, GState), \+ member(F, State)), L2),
-    append(L1, L2, L),
-    length(L, N).
+    findall(sobre(A, B),(member(sobre(A, B), GState), \+ member(sobre(A, B), State), member(sobre(_, B), State)), L3),
+    findall(disponible(G),(member(disponible(G), GState), \+ member(disponible(G), State)), L4),
+    append(L1, L2, L12),
+    append(L3, L4, L34),
+    append(L12, L34, L1234),
+    length(L1234, N).
 
-astar_heuristic(State,N) :- astar_heuristic2(State,N).
+astar_heuristic(State,N) :- astar_heuristic4(State,N).
