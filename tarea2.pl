@@ -37,11 +37,10 @@ holds(F,s0) :- member(F,[en(cam1,cargo1),
 %%% Accion manejar
 poss(manejar(Cam,L1,L2),S) :-
     camion(Cam),conectada(L1,L2),lugar(L1),lugar(L2), % Facts
-    holds(en(Cam,L1),S), % El camion Cam esta en lugar L1
-    L1 \= L2. % Diferencio variables
+    holds(en(Cam,L1),S). % El camion Cam esta en lugar L1
 
 is_positive_effect(manejar(Cam,_,L2), en(Cam,L2)). % El camion Cam pasa a estar en L2
-is_negative_effect(manejar(Cam,L1,_),en(Cam,L1)). % El camion Cam deja de estar en L1
+is_negative_effect(manejar(Cam,L1,_), en(Cam,L1)). % El camion Cam deja de estar en L1
 
 %%% Accion levantar
 poss(levantar(G,C,Sup,L),S) :-
@@ -78,27 +77,32 @@ is_negative_effect(soltar(G,C,_,_), levantando(G,C)). % La grua G ya no levantan
 is_negative_effect(soltar(_,_,Sup,_),despejada(Sup)). % La superficie Sup deja de estar despejada
 
 %%% Accion cargar
-poss(cargar(G,Container,Camion,L),S) :-
-    grua(G),container(Container),camion(Camion),lugar(L), % Facts
-    holds(levantando(G, Container), S), % La grua G esta levantando al container C
+poss(cargar(G,Co,Ca,L),S) :-
+    grua(G),container(Co),camion(Ca),lugar(L), % Facts
+    holds(levantando(G, Co), S), % La grua G esta levantando al container C
     holds(en(G, L), S), % La grua G esta en L
-    holds(en(Camion, L), S). % El camion Camion esta en L
+    \+ holds(en(Co, L), S), % El container C no esta en L
+    holds(en(Ca, L), S). % El camion Camion esta en L
 
-is_positive_effect(cargar(_,Container,Camion,_), dentro(Container, Camion)). % El container Container pasa a estar dentro del camion Camion
+is_positive_effect(cargar(_,Co,Ca,_), dentro(Co, Ca)). % El container Container pasa a estar dentro del camion Camion
 is_positive_effect(cargar(G,_,_,_), disponible(G)). % La grua G pasa a estar disponible
-is_negative_effect(cargar(G,Container,_,_), levantando(G, Container)). % La grua G ya no levanta a container Container
+is_positive_effect(cargar(_,Co,_,_), despejada(Co)). % El container Co queda despejado (redundante?)
+is_negative_effect(cargar(G,Co,_,_), levantando(G, Co)). % La grua G ya no levanta a container Container
+is_negative_effect(cargar(_,Co,_,L), en(Co, L)). % El container C deja de estar en lugar L
 
 %%% Accion descargar
-poss(descargar(G,Container,Camion,L),S) :-
-    grua(G),container(Container),camion(Camion),lugar(L), % Facts
-    holds(dentro(Container, Camion), S), % El camion Camion tiene dentro a container Container
+poss(descargar(G,Co,Ca,L),S) :-
+    grua(G),container(Co),camion(Ca),lugar(L), % Facts
+    holds(dentro(Co, Ca), S), % El camion Camion tiene dentro a container Container
+    holds(despejada(Co), S), % El container Co tiene que estar despejada
     holds(disponible(G), S), % La grua G esta disponible
     holds(en(G, L), S), % La grua G esta en L
-    holds(en(Camion, L), S). % El camion Camion esta en L
+    holds(en(Ca, L), S). % El camion Camion esta en L
 
-is_positive_effect(descargar(G,Container,_,_), levantando(G, Container)). % La grua G levanta al container Container
-is_negative_effect(descargar(_,Container,Camion,_), dentro(Container, Camion)). % El container Container ya no esta dentro camion Camion
-is_negative_effect(cargar(G,_,_,_), disponible(G)). % La grua G deja de estar disponible
+is_positive_effect(descargar(G,Co,_,_), levantando(G, Co)). % La grua G levanta al container Container
+is_negative_effect(descargar(_,Co,Ca,_), dentro(Co, Ca)). % El container Container ya no esta dentro camion Camion
+is_negative_effect(descargar(G,_,_,_), disponible(G)). % La grua G deja de estar disponible
+is_negative_effect(descargar(_,Co,_,_), despejada(Co)). % El container Co ya no esta despejado (redundante?)
 
 %%%%% Situation Calculus Successor State Axiom a la Reiter (domain-independent)
 holds(F,do(A,S)) :-
@@ -122,39 +126,36 @@ legal(do(A,S)) :-
 % ---------------------------- PART 2 -----------------------------------------
 
 goal_condition([en(c1,cargo2),en(c5,cargo1)]).
+%goal_condition([sobre(c3,c2)]).
+%goal_condition([en(c1,cargo2),sobre(c5,c2)]).
+%goal_condition([dentro(c1,cam1),dentro(c4,cam1)]).
+%goal_condition([dentro(c1,cam1),en(cam1,cargo3)]).
 
 %% heuristics for A*
 
 null_heuristic(_,0).
 
 astar_heuristic1(State,N) :-
-    goal_condition(GState),
-    findall(C,(member(sobre(C,Gpos),GState), member(sobre(C,Pos), State), Gpos\=Pos),List),
+    goal_condition(Goal),
+    findall(C,(member(sobre(C,Gpos),Goal), member(sobre(C,Pos), State), Gpos\=Pos),List),
     length(List,N).
 
 astar_heuristic2(State,N) :-
-    goal_condition(GState),
-    findall(sobre(A,B),(member(sobre(A, B),GState), \+ member(sobre(A,B), State), member(sobre(_, B), State)),List),
+    goal_condition(Goal),
+    findall(sobre(A,B),(member(sobre(A, B),Goal), \+ member(sobre(A,B), State), member(sobre(_, B), State)),List),
     length(List,N).
 
-astar_heuristic3(State, N) :-
-    goal_condition(GState),
-    findall(F, (member(F, GState), \+ member(F, State)), L1),
-    findall(en(A, B),(member(en(A, B), GState), \+ member(en(A, B), State), member(en(_, B), State)), L2),
-    findall(disponible(G),(member(disponible(G), GState), \+ member(disponible(G), State)), L3),
-    append(L1,L2,L12),
-    append(L12,L3,L123),
+the_good_heuristic(State, N) :-
+    goal_condition(Goal),
+    findall(sobre(A,B),(member(sobre(A, B),Goal), \+ member(sobre(A,B), State), member(sobre(_, B), State)),L1),
+    findall(en(A, B),(member(en(A, B), Goal), \+ member(en(A, B), State), member(en(_, B), State)), L2),
+    findall(disponible(G),(\+ member(disponible(G), State)), L3),
+    append(L1,L2, L12),
+    append(L12,L3, L123),
     length(L123, N).
 
-astar_heuristic4(State, N) :-
-    goal_condition(GState),
-    findall(en(A, B),(member(en(A, B), GState), \+ member(en(A, B), State), member(en(_, B), State)), L1),
-    findall(F, (member(F, GState), \+ member(F, State)), L2),
-    findall(sobre(A, B),(member(sobre(A, B), GState), \+ member(sobre(A, B), State), member(sobre(_, B), State)), L3),
-    findall(disponible(G),(member(disponible(G), GState), \+ member(disponible(G), State)), L4),
-    append(L1, L2, L12),
-    append(L3, L4, L34),
-    append(L12, L34, L1234),
-    length(L1234, N).
+%% We could do better :)
 
-astar_heuristic(State,N) :- astar_heuristic4(State,N).
+astar_heuristic(State,N) :-
+  the_good_heuristic(State,M),
+  N is 1*M.
